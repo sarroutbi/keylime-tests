@@ -1,0 +1,44 @@
+summary: Focused reproducer for PR #1693 - ACTUAL CI failing tests
+
+description: |
+    Tests the exact tests that are failing in the CI e2e-with-revocation plan:
+    - /functional/durable-attestion-sanity-on-localhost
+    - /functional/measured-boot-swtpm-sanity
+    - /regression/CVE-2023-3674
+
+environment+:
+  RUST_IMA_EMULATOR: 1
+  TPM_BINARY_MEASUREMENTS: /var/tmp/binary_bios_measurements
+#  KEYLIME_UPSTREAM_URL: https://github.com/hse-aurora/keylime-oss.git
+  KEYLIME_UPSTREAM_URL: https://github.com/sarroutbi-test-organization/keylime-oss
+  KEYLIME_UPSTREAM_BRANCH: push-attestation
+
+prepare:
+  - how: shell
+    order: 30
+    script:
+      - systemctl disable --now dnf-makecache.service || true
+      - systemctl disable --now dnf-makecache.timer || true
+      - rm -rf /var/cache/dnf /var/cache/libdnf5
+      - dnf clean all
+      - dnf makecache
+      - dnf update -y tpm2-tss tpm2-tools || true
+      # Clean keylime sources to force re-clone with correct branch
+      - rm -rf /var/tmp/keylime_sources
+
+discover:
+  how: fmf
+  test:
+   # Setup tests
+   - /setup/configure_tpm_emulator
+   - /setup/install_upstream_keylime
+   - /setup/install_rust_keylime_from_copr
+   - /setup/configure_kernel_ima_module/ima_policy_signing
+   # Actual failing tests from CI e2e-with-revocation plan
+   - /functional/durable-attestion-sanity-on-localhost
+   - /functional/measured-boot-swtpm-sanity
+   - /regression/CVE-2023-3674
+   - /compatibility/basic-attestation-on-localhost-api-version-bump
+
+execute:
+  how: tmt

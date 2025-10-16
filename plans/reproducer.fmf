@@ -1,0 +1,52 @@
+summary: Reproducer for keylime PR #1693 regression test failures
+
+description: |
+    This plan reproduces the regression test failures from keylime PR #1693.
+    Runs the same regression tests as the CI e2e-with-revocation plan.
+    Designed to run against a remote Fedora 42 machine via tmt connect provisioner.
+
+# Environment variables for upstream keylime installation
+# These will be set to use the PR branch when running from keylime repo
+environment+:
+  RUST_IMA_EMULATOR: 1
+  TPM_BINARY_MEASUREMENTS: /var/tmp/binary_bios_measurements
+  #KEYLIME_UPSTREAM_URL: https://github.com/hse-aurora/keylime-oss.git
+  KEYLIME_UPSTREAM_URL: https://github.com/sarroutbi-test-organization/keylime-oss
+  KEYLIME_UPSTREAM_BRANCH: push-attestation
+  # Enable debug to see installation details
+  TMT_DEBUG: 1
+
+# Prepare step to fix repository issues and update packages
+prepare:
+  - how: shell
+    order: 30
+    script:
+      - systemctl disable --now dnf-makecache.service || true
+      - systemctl disable --now dnf-makecache.timer || true
+      - rm -rf /var/cache/dnf /var/cache/libdnf5
+      - dnf clean all
+      - dnf makecache
+      - dnf update -y tpm2-tss tpm2-tools || true
+      # Clean keylime sources to force re-clone with correct branch
+      - rm -rf /var/tmp/keylime_sources
+
+discover:
+  how: fmf
+  test:
+   # Setup tasks
+   - /setup/apply_workarounds
+   - /setup/configure_tpm_emulator
+   - /setup/install_upstream_keylime
+   - /setup/install_rust_keylime_from_copr
+   # Configure IMA policy to signing (used by most tests)
+   - /setup/configure_kernel_ima_module/ima_policy_signing
+   # Run all regression tests (same as CI)
+   - /regression/cve-2023-38200
+   - /regression/cve-2023-38201
+   - /regression/CVE-2023-3674
+   - /regression/issue-1380-agent-removed-and-re-added
+   - /regression/keylime-agent-option-override-through-envvar
+   - /regression/db-connection-leak-reproducer
+
+execute:
+  how: tmt
